@@ -27,7 +27,7 @@ services:
         sync: false
 
   # Frontend Client
-  - type: site
+  - type: static_site
     name: dialer-client
     root: client
     buildCommand: npm install && npm run build
