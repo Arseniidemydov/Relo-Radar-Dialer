@@ -3,7 +3,7 @@ services:
   - type: web
     name: dialer-server
     env: docker
-    root: server             # Tells Render to look in the 'server' folder
+    rootDir: server             # Tells Render to look in the 'server' folder
     dockerfilePath: Dockerfile
     plan: free
     autoDeploy: true
@@ -30,7 +30,7 @@ services:
   - type: web
     name: dialer-client
     env: static
-    root: client
+    rootDir: client
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:
