@@ -10,6 +10,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+app.set('trust proxy', 1); // Required for Render or other proxies
 app.use(cors());
 app.use(express.urlencoded({ extended: false })); // Twilio sends webhooks as form-urlencoded
 app.use(express.json());
@@ -20,6 +21,10 @@ app.use('/leads', leadsRoutes);
 
 app.get('/', (req, res) => {
     res.send('Twilio Dialer Backend Running');
+});
+
+app.get('/ping', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Start Server
