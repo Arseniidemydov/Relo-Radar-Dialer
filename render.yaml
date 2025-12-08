@@ -27,11 +27,12 @@ services:
         sync: false
 
   # Frontend Client
-  - type: static_site
+  - type: web
     name: dialer-client
+    env: static
     root: client
     buildCommand: npm install && npm run build
-    publishDir: dist
+    staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
         fromService:
