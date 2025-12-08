@@ -1,0 +1,40 @@
+services:
+  # Backend Server
+  - type: web
+    name: dialer-server
+    env: docker
+    root: server             # Tells Render to look in the 'server' folder
+    dockerfilePath: Dockerfile
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: NODE_ENV
+        value: production
+      # User will need to input these in the dashboard
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_API_KEY
+        sync: false
+      - key: TWILIO_API_SECRET
+        sync: false
+      - key: TWILIO_TWIML_APP_SID
+        sync: false
+      - key: TWILIO_CALLER_ID
+        sync: false
+
+  # Frontend Client
+  - type: static
+    name: dialer-client
+    root: client
+    buildCommand: npm install && npm run build
+    publishDir: dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+            type: web
+            name: dialer-server
+            property: host
