@@ -11,6 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.set('trust proxy', 1); // Required for Render or other proxies
+console.log('Applied trust proxy setting');
 app.use(cors());
 app.use(express.urlencoded({ extended: false })); // Twilio sends webhooks as form-urlencoded
 app.use(express.json());
