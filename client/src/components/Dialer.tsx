@@ -10,7 +10,7 @@ interface Lead {
     notes: string;
 }
 
-const SERVER_URL = 'http://localhost:3001'; // Should be env var
+const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export const Dialer: React.FC = () => {
     const { deviceState, callState, makeCall, hangup, error: voiceError } = useTwilioVoice({
