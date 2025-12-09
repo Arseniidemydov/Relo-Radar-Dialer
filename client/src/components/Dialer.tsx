@@ -10,7 +10,26 @@ interface Lead {
     notes: string;
 }
 
-const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const getApiUrl = () => {
+    let url = import.meta.env.VITE_API_URL;
+
+    if (!url) {
+        if (import.meta.env.MODE === 'production') {
+            // Fallback for Render if VITE_API_URL isn't set
+            url = 'https://dialer-server.onrender.com';
+        } else {
+            url = 'http://localhost:3001';
+        }
+    }
+
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = `https://${url}`;
+    }
+    // Remove trailing slash if present for consistency
+    return url.replace(/\/$/, '');
+};
+
+const SERVER_URL = getApiUrl();
 
 export const Dialer: React.FC = () => {
     const { deviceState, callState, makeCall, hangup, error: voiceError } = useTwilioVoice({
@@ -20,15 +39,41 @@ export const Dialer: React.FC = () => {
     const [leads, setLeads] = useState<Lead[]>([]);
     const [currentLeadIndex, setCurrentLeadIndex] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [isLoadingLeads, setIsLoadingLeads] = useState(true);
+    const [fetchError, setFetchError] = useState<string | null>(null);
     const [dropStatus, setDropStatus] = useState<string | null>(null);
+    const [elapsedTime, setElapsedTime] = useState(0);
+
+    useEffect(() => {
+        let timer: ReturnType<typeof setInterval>;
+        if (isLoadingLeads) {
+            timer = setInterval(() => {
+                setElapsedTime(prev => prev + 1);
+            }, 1000);
+        }
+        return () => clearInterval(timer);
+    }, [isLoadingLeads]);
 
     useEffect(() => {
         const fetchLeads = async () => {
+            console.log('Fetching leads from:', SERVER_URL);
+            setIsLoadingLeads(true);
+            setFetchError(null);
             try {
-                const { data } = await axios.get(`${SERVER_URL}/leads`);
+                const { data } = await axios.get(`${SERVER_URL}/leads`, {
+                    timeout: 90000 // 90 second timeout for cold starts
+                });
+                console.log('Leads fetched:', data);
                 setLeads(data);
-            } catch (err) {
+            } catch (err: any) {
                 console.error("Failed to load leads", err);
+                const errorMessage = err.message || "Failed to load leads";
+                const detailedError = err.code === 'ECONNABORTED'
+                    ? "Connection timed out. Server might be waking up (cold start)."
+                    : errorMessage;
+                setFetchError(detailedError);
+            } finally {
+                setIsLoadingLeads(false);
             }
         };
         fetchLeads();
@@ -64,7 +109,27 @@ export const Dialer: React.FC = () => {
         }
     };
 
-    if (!currentLead) return <div className="p-8 text-white">Loading leads...</div>;
+    if (isLoadingLeads) return (
+        <div className="p-8 text-white flex flex-col items-center justify-center min-h-[200px]">
+            <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-lg">Loading leads...</p>
+            <p className="text-sm text-gray-400 mt-2">Target: {SERVER_URL}</p>
+            <p className="text-xs text-gray-500 mt-1">Time elapsed: {elapsedTime}s</p>
+            {elapsedTime > 5 && (
+                <p className="text-xs text-yellow-500 mt-2 animate-pulse">Server might be waking up...</p>
+            )}
+        </div>
+    );
+
+    if (fetchError) return (
+        <div className="p-8 text-red-400">
+            <h2 className="text-xl font-bold mb-2">Error Loading Leads</h2>
+            <p>{fetchError}</p>
+            <p className="text-sm text-gray-400 mt-2">Trying to connect to: {SERVER_URL}</p>
+        </div>
+    );
+
+    if (!currentLead) return <div className="p-8 text-white">No leads found.</div>;
 
     return (
         <div className="max-w-md mx-auto bg-gray-800 rounded-xl shadow-2xl overflow-hidden border border-gray-700">
