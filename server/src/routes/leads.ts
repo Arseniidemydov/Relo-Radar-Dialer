@@ -1,11 +1,9 @@
-
 import { Router, Request, Response } from 'express';
 import twilio from 'twilio';
 import { leads, activeCalls } from '../store';
+import axios from 'axios';
 
 const router = Router();
-// Moved client initialization to route handler
-
 
 // 1. Get Leads
 router.get('/', (req: Request, res: Response) => {
@@ -34,18 +32,51 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
         return res.status(500).json({ error: 'Voiceflow number not configured' });
     }
 
+    // Use SERVER_URL for creating the callback path
+    const serverUrl = process.env.SERVER_URL || 'http://localhost:3000';
+    const callerId = process.env.TWILIO_CALLER_ID;
+
+    if (!callerId) {
+        return res.status(500).json({ error: 'TWILIO_CALLER_ID not configured' });
+    }
+
     try {
         console.log(`[DropVM] LeadID: ${leadId}, Name: ${leadName || 'Unknown'}`);
+
+        // --- VOICEFLOW VARIABLE INJECTION ---
+        // We update the Voiceflow State for this Caller ID before the call connects.
+        // This effectively "primes" the bot with the lead's data.
+        if (process.env.VOICEFLOW_API_KEY) {
+            console.log(`[DropVM] Updating Voiceflow State for UserID (CallerID): ${callerId}`);
+            try {
+                // Voiceflow API: PATCH /state/user/{userID}/variables
+                // userID in Voiceflow telephony is usually the Caller ID (E.164)
+                await axios.patch(
+                    `https://general-runtime.voiceflow.com/state/user/${encodeURIComponent(callerId)}/variables`,
+                    { name: leadName || 'Unknown' },
+                    {
+                        headers: {
+                            Authorization: process.env.VOICEFLOW_API_KEY,
+                            'versionID': 'production' // Optional, defaults to published version
+                        }
+                    }
+                );
+                console.log(`[DropVM] Voiceflow variables updated successfully.`);
+            } catch (vfError: any) {
+                console.error(`[DropVM] Failed to update Voiceflow variables:`, vfError.message);
+                // We typically proceed anyway, even if variable injection fails, to at least connect the call.
+            }
+        } else {
+            console.warn('[DropVM] VOICEFLOW_API_KEY missing. Skipping variable injection.');
+        }
+        // ------------------------------------
+
         console.log(`[DropVM] Found CallSid to redirect: ${callSid}`);
         console.log(`[DropVM] Redirecting to Voiceflow Number: ${voiceflowNumber}`);
 
         // Construct TwiML for the redirect
         const response = new twilio.twiml.VoiceResponse();
         response.say(`Redirecting ${leadName || 'the lead'} to voicemail now.`);
-
-        // Use SERVER_URL for creating the callback path
-        const serverUrl = process.env.SERVER_URL || 'http://localhost:3000';
-        const callerId = process.env.TWILIO_CALLER_ID;
 
         // Append name to the action URL so we get it back in the webhook
         const actionUrl = `${serverUrl}/leads/dial-status?name=${encodeURIComponent(leadName || '')}`;
