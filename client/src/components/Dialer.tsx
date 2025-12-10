@@ -108,7 +108,8 @@ export const Dialer: React.FC = () => {
         setDropStatus('Dropping voicemail...');
         try {
             await axios.post(`${SERVER_URL}/leads/drop-voicemail`, {
-                leadId: currentLead.id
+                leadId: currentLead.id,
+                leadName: currentLead.name
             });
             setDropStatus('Voicemail Dropped!');
             // Optionally hangup the agent leg locally if desired, 
