@@ -1,0 +1,6 @@
+Name,Phone number,notes,status
+John Doe,+15551234567,Interested in product,Not contacted
+Jane Smith,+15559876543,Call later,Contacted
+Bob Wilson,+15551112222,Needs follow up,Not contacted
+Invalid User,,Missing phone,Not contacted
+UpperCase Status,+15553334444,Test case insensitive,NOT CONTACTED
