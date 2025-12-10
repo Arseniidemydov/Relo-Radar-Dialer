@@ -167,60 +167,59 @@ export const Dialer: React.FC = () => {
     );
 
     return (
-        <div className="max-w-md mx-auto bg-gray-800 rounded-xl shadow-2xl overflow-hidden border border-gray-700 relative">
-            {/* Header Actions */}
-            <div className="absolute top-4 right-4 z-10">
+        <div className="bg-transparent rounded-3xl border border-white/20 p-1 relative overflow-hidden backdrop-blur-sm">
+            {/* Header Actions - Absolute positioned import */}
+            <div className="absolute top-6 right-6 z-10">
                 <ImportLeadsModal onImport={handleImportLeads} />
             </div>
 
-            <div className="p-6">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-teal-400">Power Dialer</h2>
-                    {/* Moved Import Button to absolute top right for cleaner layout or just keep it here? 
-                         Let's keep the device state here and import button maybe elsewhere or next to it.
-                         Actually, let's put it in the top right absolute position to save space in the header row.
-                     */}
-                    <div className={`px-2 py-1 rounded text-xs font-mono select-none ${deviceState === 'ready' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
-                        {deviceState.toUpperCase()}
+            <div className="p-8 space-y-8">
+                {/* Lead Info Section - Single Card Vertical Layout */}
+                <div className="bg-[#0A1025] border border-white/10 rounded-2xl p-6 text-center space-y-4">
+                    <div>
+                        <h3 className="text-white font-bold text-2xl leading-tight">{currentLead.name}</h3>
+                        <p className="text-gray-400 font-mono text-lg mt-1">{currentLead.phone}</p>
+                    </div>
+
+                    <div className="w-full h-px bg-white/5"></div>
+
+                    <div className="text-left">
+                        <p className="text-gray-500 text-xs uppercase tracking-wider font-bold mb-2">Notes</p>
+                        <p className="text-gray-300 text-sm leading-relaxed max-h-32 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+                            {currentLead.notes}
+                        </p>
                     </div>
                 </div>
 
-                <div className="bg-gray-900 p-4 rounded-lg mb-6 border border-gray-700 relative group">
-                    <h3 className="text-2xl font-semibold text-white mb-1">{currentLead.name}</h3>
-                    <p className="text-gray-400 text-lg mb-2">{currentLead.phone}</p>
-                    <div className="h-px bg-gray-700 my-3"></div>
-                    <p className="text-sm text-gray-500 uppercase tracking-wider mb-1">Notes</p>
-                    <p className="text-gray-300 max-h-32 overflow-y-auto">{currentLead.notes}</p>
-
-                    <div className="absolute top-2 right-2 text-xs text-gray-600 font-mono">
-                        {currentLeadIndex + 1} / {leads.length}
-                    </div>
-                </div>
-
-                <div className="flex flex-col gap-3">
-                    {/* Call Controls */}
+                <div className="flex flex-col gap-4 pt-2">
+                    {/* Main Action Button */}
                     {callState === 'idle' ? (
                         <button
                             onClick={() => makeCall(currentLead.id, currentLead.phone)}
                             disabled={deviceState !== 'ready'}
-                            className="w-full py-3 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                            className="group w-full py-4 px-6 bg-[#3B82F6] hover:bg-[#2563EB] active:bg-[#1D4ED8] text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] flex items-center justify-center gap-3"
                         >
-                            <span className="text-xl">📞</span> Call Lead
+                            <span className="text-xl group-hover:scale-110 transition-transform">📞</span>
+                            <span className="font-bold text-lg">Start a call</span>
                         </button>
                     ) : (
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-3">
                             <button
                                 onClick={hangup}
-                                className="py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors"
+                                className="w-full py-4 bg-red-600 hover:bg-red-500 text-white font-bold text-lg rounded-xl transition-colors shadow-lg shadow-red-900/20"
                             >
-                                Hang Up
+                                End Call
                             </button>
                             <button
                                 onClick={handleDropVoicemail}
                                 disabled={loading}
-                                className="py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-colors disabled:opacity-50"
+                                className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-lg rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/20"
                             >
-                                {loading ? 'Processing...' : 'Drop Voicemail 🤖'}
+                                {loading ? 'Processing...' : (
+                                    <>
+                                        <span>🤖</span> Drop Voicemail
+                                    </>
+                                )}
                             </button>
                         </div>
                     )}
@@ -229,23 +228,38 @@ export const Dialer: React.FC = () => {
                     <button
                         onClick={handleNextLead}
                         disabled={callState !== 'idle' || currentLeadIndex >= leads.length - 1}
-                        className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-gray-300 font-medium rounded-lg transition-colors mt-2 disabled:opacity-50"
+                        className="w-full py-4 bg-[#1F2937] hover:bg-[#374151] text-gray-200 font-semibold text-lg rounded-xl transition-colors border border-white/5 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        Next Lead →
+                        Next Lead
+                        <span className="text-gray-500">→</span>
                     </button>
+
+                    <div className="text-center">
+                        <span className="text-xs font-mono text-gray-600">
+                            {currentLeadIndex + 1} / {leads.length} Leads
+                        </span>
+                    </div>
                 </div>
 
-                {/* Status Messages */}
-                <div className="mt-6 text-center h-6">
-                    {voiceError && <p className="text-red-400 text-sm">{voiceError}</p>}
-                    {dropStatus && <p className="text-indigo-400 font-medium animate-pulse">{dropStatus}</p>}
-                    {!dropStatus && !voiceError && callState !== 'idle' && (
-                        <p className="text-emerald-400 font-mono text-sm animate-pulse">
-                            Status: {callState.toUpperCase()}
-                        </p>
-                    )}
+                {/* Status Footer */}
+                <div className="absolute bottom-2 left-0 w-full text-center pointer-events-none">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/5 text-xs font-semibold">
+                        {voiceError ? (
+                            <span className="text-red-400">{voiceError}</span>
+                        ) : dropStatus ? (
+                            <span className="text-indigo-400 animate-pulse">{dropStatus}</span>
+                        ) : (
+                            <>
+                                <span className={`w-2 h-2 rounded-full ${deviceState === 'ready' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`}></span>
+                                <span className={deviceState === 'ready' ? 'text-gray-300' : 'text-red-300'}>
+                                    {callState !== 'idle' ? `Status: ${callState.toUpperCase()}` : `Device: ${deviceState.toUpperCase()}`}
+                                </span>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
     );
 };
+
