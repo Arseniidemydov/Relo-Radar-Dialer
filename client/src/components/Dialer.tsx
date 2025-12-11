@@ -30,8 +30,8 @@ const getApiUrl = () => {
 };
 
 const SERVER_URL = getApiUrl();
-
 import { ImportLeadsModal } from './ImportLeadsModal';
+import { AddProspectModal } from './AddProspectModal';
 
 export const Dialer: React.FC = () => {
     const { deviceState, callState, makeCall, hangup, error: voiceError } = useTwilioVoice({
@@ -93,6 +93,19 @@ export const Dialer: React.FC = () => {
         console.log('Imported new leads:', importedLeads);
     };
 
+    const handleAddLead = (newLead: Lead) => {
+        setLeads(prev => [...prev, newLead]);
+        // Optionally jump to new lead? Or just let user navigate.
+        // Let's just add it.
+        // If list was empty/error, clear error.
+        if (leads.length === 0) {
+            setCurrentLeadIndex(0);
+            setFetchError(null);
+            setIsLoadingLeads(false);
+        }
+        console.log('Added new lead:', newLead);
+    };
+
     const currentLead = leads[currentLeadIndex];
 
     const handleNextLead = () => {
@@ -141,7 +154,13 @@ export const Dialer: React.FC = () => {
             <p className="text-sm text-gray-400 mt-2">Target: {SERVER_URL}</p>
             <p className="text-xs text-gray-500 mt-1">Time elapsed: {elapsedTime}s</p>
             {elapsedTime > 5 && (
-                <p className="text-xs text-yellow-500 mt-2 animate-pulse">Server might be waking up...</p>
+                <div className="flex flex-col items-center mt-4">
+                    <p className="text-xs text-yellow-500 mb-2 animate-pulse">Server might be waking up...</p>
+                    <div className="flex gap-2">
+                        <ImportLeadsModal onImport={handleImportLeads} />
+                        <AddProspectModal onAdd={handleAddLead} />
+                    </div>
+                </div>
             )}
         </div>
     );
@@ -154,8 +173,11 @@ export const Dialer: React.FC = () => {
 
             {/* Allow importing even if fetch failed */}
             <div className="p-4 bg-gray-800 rounded-lg border border-gray-700 flex flex-col items-center">
-                <p className="text-gray-300 mb-3 text-sm">You can still import leads manually CSV:</p>
-                <ImportLeadsModal onImport={handleImportLeads} />
+                <p className="text-gray-300 mb-3 text-sm">You can import CSV or add manually:</p>
+                <div className="flex gap-3">
+                    <ImportLeadsModal onImport={handleImportLeads} />
+                    <AddProspectModal onAdd={handleAddLead} />
+                </div>
             </div>
         </div>
     );
@@ -163,14 +185,37 @@ export const Dialer: React.FC = () => {
     if (!currentLead && leads.length === 0) return (
         <div className="p-8 text-white flex flex-col items-center">
             <p className="mb-4 text-xl">No leads found.</p>
-            <ImportLeadsModal onImport={handleImportLeads} />
+            <div className="flex gap-3">
+                <ImportLeadsModal onImport={handleImportLeads} />
+                <AddProspectModal onAdd={handleAddLead} />
+            </div>
         </div>
     );
+
+    const handleStartCall = async () => {
+        if (!currentLead) return;
+
+        // Trigger n8n webhook (fire and forget)
+        try {
+            // Using a simple fetch or axios to trigger the webhook
+            // We don't await this blocking the call, but we might want to log it
+            axios.get('https://lovoiceagent.app.n8n.cloud/webhook/a5f519f2-31f6-4a91-8ad2-dd322d4d8ca2', {
+                params: {
+                    Phone_number: currentLead.phone
+                }
+            }).catch(e => console.error('Webhook failed:', e));
+        } catch (e) {
+            console.error('Error triggering webhook:', e);
+        }
+
+        makeCall(currentLead.id, currentLead.phone);
+    };
 
     return (
         <div className="bg-transparent rounded-3xl border border-white/20 p-1 relative overflow-hidden backdrop-blur-sm">
             {/* Header Actions - Absolute positioned import */}
-            <div className="absolute top-6 right-6 z-10">
+            <div className="absolute top-6 right-6 z-10 flex gap-2">
+                <AddProspectModal onAdd={handleAddLead} />
                 <ImportLeadsModal onImport={handleImportLeads} />
             </div>
 
@@ -196,7 +241,7 @@ export const Dialer: React.FC = () => {
                     {/* Main Action Button */}
                     {callState === 'idle' ? (
                         <button
-                            onClick={() => makeCall(currentLead.id, currentLead.phone)}
+                            onClick={handleStartCall}
                             disabled={deviceState !== 'ready'}
                             className="group w-full py-4 px-6 bg-[#3B82F6] hover:bg-[#2563EB] active:bg-[#1D4ED8] text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] flex items-center justify-center gap-3"
                         >
