@@ -53,9 +53,10 @@ export const AddProspectModal: React.FC<AddProspectModalProps> = ({ onAdd }) => 
         <>
             <button
                 onClick={toggleModal}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors flex items-center gap-2 text-sm font-medium shadow-lg shadow-indigo-900/20"
+                className="px-4 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-all duration-200 border border-white/10 backdrop-blur-md flex items-center gap-2 text-sm font-semibold shadow-lg shadow-black/20 group"
             >
-                <span className="text-lg leading-none">+</span> Add Prospect
+                <span className="text-lg leading-none group-hover:scale-125 transition-transform">＋</span>
+                <span>Add Prospect</span>
             </button>
 
             {isOpen && (

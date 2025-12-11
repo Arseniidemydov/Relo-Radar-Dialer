@@ -214,13 +214,20 @@ export const Dialer: React.FC = () => {
 
     return (
         <div className="bg-transparent rounded-3xl border border-white/20 p-1 relative overflow-hidden backdrop-blur-sm">
-            {/* Header Actions - Absolute positioned import */}
-            <div className="absolute top-6 right-6 z-10 flex gap-2">
-                <AddProspectModal onAdd={handleAddLead} />
-                <ImportLeadsModal onImport={handleImportLeads} />
-            </div>
 
-            <div className="p-8 space-y-8">
+            <div className="p-8 space-y-6">
+                {/* Header Row */}
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>
+                        <span className="text-white/50 text-sm font-medium tracking-wide uppercase">Live Session</span>
+                    </div>
+                    <div className="flex gap-3">
+                        <AddProspectModal onAdd={handleAddLead} />
+                        <ImportLeadsModal onImport={handleImportLeads} />
+                    </div>
+                </div>
+
                 {/* Lead Info Section - Single Card Vertical Layout */}
                 <div className="bg-[#0A1025] border border-white/10 rounded-2xl p-6 text-center space-y-4">
                     <div>

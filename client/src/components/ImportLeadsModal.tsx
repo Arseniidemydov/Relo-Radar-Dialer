@@ -110,9 +110,10 @@ export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({ onImport }) 
         <>
             <button
                 onClick={toggleModal}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
+                className="px-4 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-all duration-200 border border-white/10 backdrop-blur-md flex items-center gap-2 text-sm font-semibold shadow-lg shadow-black/20 group"
             >
-                📥 Import CSV
+                <span className="text-lg leading-none group-hover:rotate-12 transition-transform">📥</span>
+                <span>Import CSV</span>
             </button>
 
             {isOpen && (
