@@ -16,7 +16,7 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     const voiceflowNumber = process.env.TWILIO_VOICEFLOW_NUMBER;
 
-    const { leadId, leadName } = req.body;
+    const { leadId, leadName, leadPhone } = req.body;
 
     if (!leadId) {
         return res.status(400).json({ error: 'Missing leadId' });
@@ -41,7 +41,7 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
     }
 
     try {
-        console.log(`[DropVM] LeadID: ${leadId}, Name: ${leadName || 'Unknown'}`);
+        console.log(`[DropVM] LeadID: ${leadId}, Name: ${leadName || 'Unknown'}, Phone: ${leadPhone || 'Unknown'}`);
 
         // --- VOICEFLOW VARIABLE INJECTION ---
         // We update the Voiceflow State for this Caller ID before the call connects.
@@ -53,7 +53,10 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
                 // userID in Voiceflow telephony is usually the Caller ID (E.164)
                 await axios.patch(
                     `https://general-runtime.voiceflow.com/state/user/${encodeURIComponent(callerId)}/variables`,
-                    { name: leadName || 'Unknown' },
+                    {
+                        name: leadName || 'Unknown',
+                        phone_number: leadPhone || 'Unknown'
+                    },
                     {
                         headers: {
                             Authorization: process.env.VOICEFLOW_API_KEY,
@@ -92,6 +95,18 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
         await client.calls(callSid).update({
             twiml: response.toString()
         });
+
+        // Trigger N8N Webhook with new Redirect Call SID
+        try {
+            // The Call SID remains the same for the parent call leg we redirected
+            await axios.post('https://lovoiceagent.app.n8n.cloud/webhook/f48c5702-1f17-445c-a0d2-d487985c23e8', {
+                call_sid: callSid,
+                Phone_number: leadPhone || 'Unknown'
+            });
+            console.log(`[DropVM] Webhook triggered for CallSid: ${callSid}`);
+        } catch (webhookError: any) {
+            console.error(`[DropVM] Failed to trigger webhook:`, webhookError.message);
+        }
 
         // Cleanup store
         activeCalls.delete(leadId);
