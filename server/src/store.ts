@@ -2,8 +2,12 @@
 // Simple in-memory store for Lead <-> CallSid mapping
 // In a real app, use Redis or a database
 
-// Map leadId -> callSid
+// Store active calls: LeadID -> CallSid
 export const activeCalls = new Map<string, string>();
+
+// Store pending voicemail drops: CallerID -> Lead Phone
+// Used to link the outbound call leg to the inbound voiceflow leg
+export const pendingVoicemails = new Map<string, string>();
 
 interface Lead {
     id: string;

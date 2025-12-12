@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import twilio from 'twilio';
-import { leads, activeCalls } from '../store';
+import { leads, activeCalls, pendingVoicemails } from '../store';
 import axios from 'axios';
 
 const router = Router();
@@ -72,6 +72,10 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
         console.log(`[DropVM] Found CallSid to redirect: ${callSid}`);
         console.log(`[DropVM] Redirecting to Voiceflow Number: ${voiceflowNumber}`);
 
+        // Store mapping for the Proxy to find the Lead Phone later
+        pendingVoicemails.set(callerId, leadPhone || 'Unknown');
+        console.log(`[DropVM] Stored mapping: ${callerId} -> ${leadPhone}`);
+
         // Construct TwiML for the redirect
         const response = new twilio.twiml.VoiceResponse();
         response.say(`Redirecting ${leadName || 'the lead'} to voicemail now.`);
@@ -79,21 +83,13 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
         // Append name to the action URL so we get it back in the webhook
         const actionUrl = `${serverUrl}/leads/dial-status?name=${encodeURIComponent(leadName || '')}`;
 
-        // Webhook Trigger URL: This runs when the Voiceflow number takes the call
-        // We embed the Lead Phone here to ensure it's passed correctly to n8n
-        const webhookUrl = `${serverUrl}/leads/voiceflow-webhook?leadPhone=${encodeURIComponent(leadPhone || 'Unknown')}`;
-
         const dial = response.dial({
             action: actionUrl,
             method: 'POST',
             callerId: callerId
         });
 
-        // The 'url' attribute triggers when the called party answers (Screening)
-        // We use it to fire our webhook with the child leg SID + Lead Phone
-        dial.number({
-            url: webhookUrl
-        }, voiceflowNumber);
+        dial.number(voiceflowNumber);
 
         console.log('[DropVM] Generated TwiML:', response.toString());
 
@@ -111,29 +107,7 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
     }
 });
 
-// 3. VOICEFLOW WEBHOOK TRIGGER (The "Notifier")
-// Triggered by <Number url="..."> when the call connects
-router.post('/voiceflow-webhook', async (req: Request, res: Response) => {
-    const { CallSid } = req.body; // Child Call SID
-    const { leadPhone } = req.query;
-
-    console.log(`[VoiceflowWebhook] Triggered. Leg SID: ${CallSid}, Lead Phone: ${leadPhone}`);
-
-    try {
-        await axios.post('https://lovoiceagent.app.n8n.cloud/webhook/f48c5702-1f17-445c-a0d2-d487985c23e8', {
-            call_sid: CallSid,
-            Phone_number: leadPhone || 'Unknown'
-        });
-        console.log(`[VoiceflowWebhook] N8N Webhook sent successfully.`);
-    } catch (webhookError: any) {
-        console.error(`[VoiceflowWebhook] Failed to send webhook:`, webhookError.message);
-    }
-
-    // Return empty TwiML to continue the call connection
-    res.type('text/xml').send('<Response></Response>');
-});
-
-// 4. VOICEFLOW PROXY ROUTE (The "Interceptor")
+// 3. VOICEFLOW PROXY ROUTE (The "Interceptor")
 // Point your Twilio Number to THIS route: https://your-render-url.com/leads/voiceflow-proxy
 router.get('/voiceflow-proxy', (req, res) => {
     res.send('Voiceflow Proxy is Active. Please configure Twilio to use POST.');
@@ -142,14 +116,37 @@ router.get('/voiceflow-proxy', (req, res) => {
 router.post('/voiceflow-proxy', async (req: Request, res: Response) => {
     console.log('[VoiceflowProxy] Incoming call intercepted.');
 
-    // 1. Capture the CallSid (Debug only)
+    // 1. Capture the CallSid (This is the INBOUND leg to Voiceflow)
     const callSid = req.body.CallSid;
-    console.log(`[VoiceflowProxy] Proxying CallSid: ${callSid}`);
+    const fromNumber = req.body.From; // This is the CallerID we used to dial out
 
-    // NOTE: We do NOT trigger the webhook here anymore, because req.body.From is the CallerID.
-    // We rely on /voiceflow-webhook (above) to do it with the correct Lead Phone.
+    console.log(`[VoiceflowProxy] Captured Inbound CallSid: ${callSid}`);
+    console.log(`[VoiceflowProxy] CallerID (From): ${fromNumber}`);
 
-    // 2. Forward the call to the REAL Voiceflow URL (Transparent Proxy)
+    // 2. Retrieve the Lead Phone from our store
+    const leadPhone = pendingVoicemails.get(fromNumber);
+
+    if (leadPhone) {
+        console.log(`[VoiceflowProxy] Retrieved Principal Lead Phone: ${leadPhone}`);
+
+        // 3. Trigger Webhook with Inbound SID + Correct Lead Phone
+        try {
+            await axios.post('https://lovoiceagent.app.n8n.cloud/webhook/f48c5702-1f17-445c-a0d2-d487985c23e8', {
+                call_sid: callSid,
+                Phone_number: leadPhone
+            });
+            console.log(`[VoiceflowProxy] Webhook triggered successfully with Inbound SID.`);
+        } catch (webhookError: any) {
+            console.error(`[VoiceflowProxy] Failed to trigger webhook:`, webhookError.message);
+        }
+
+        // Cleanup mapping
+        pendingVoicemails.delete(fromNumber);
+    } else {
+        console.warn(`[VoiceflowProxy] Warning: No pending mapping found for CallerID ${fromNumber}`);
+    }
+
+    // 4. Forward the call to the REAL Voiceflow URL (Transparent Proxy)
     const voiceflowUrl = process.env.VOICEFLOW_FORWARDING_URL ? process.env.VOICEFLOW_FORWARDING_URL.trim() : '';
 
     if (!voiceflowUrl) {
