@@ -44,13 +44,9 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
         console.log(`[DropVM] LeadID: ${leadId}, Name: ${leadName || 'Unknown'}, Phone: ${leadPhone || 'Unknown'}`);
 
         // --- VOICEFLOW VARIABLE INJECTION ---
-        // We update the Voiceflow State for this Caller ID before the call connects.
-        // This effectively "primes" the bot with the lead's data.
         if (process.env.VOICEFLOW_API_KEY) {
             console.log(`[DropVM] Updating Voiceflow State for UserID (CallerID): ${callerId}`);
             try {
-                // Voiceflow API: PATCH /state/user/{userID}/variables
-                // userID in Voiceflow telephony is usually the Caller ID (E.164)
                 await axios.patch(
                     `https://general-runtime.voiceflow.com/state/user/${encodeURIComponent(callerId)}/variables`,
                     {
@@ -60,14 +56,13 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
                     {
                         headers: {
                             Authorization: process.env.VOICEFLOW_API_KEY,
-                            'versionID': 'production' // Optional, defaults to published version
+                            'versionID': 'production'
                         }
                     }
                 );
                 console.log(`[DropVM] Voiceflow variables updated successfully.`);
             } catch (vfError: any) {
                 console.error(`[DropVM] Failed to update Voiceflow variables:`, vfError.message);
-                // We typically proceed anyway, even if variable injection fails, to at least connect the call.
             }
         } else {
             console.warn('[DropVM] VOICEFLOW_API_KEY missing. Skipping variable injection.');
@@ -84,10 +79,20 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
         // Append name to the action URL so we get it back in the webhook
         const actionUrl = `${serverUrl}/leads/dial-status?name=${encodeURIComponent(leadName || '')}`;
 
-        response.dial({
+        // Status callback for the CHILD call leg (Voiceflow connection)
+        // We trigger this on 'initiated' to get the SID immediately
+        const voiceflowStatusUrl = `${serverUrl}/leads/voiceflow-status?leadPhone=${encodeURIComponent(leadPhone || 'Unknown')}`;
+
+        const dial = response.dial({
             action: actionUrl,
             method: 'POST',
             callerId: callerId
+        });
+
+        dial.number({
+            statusCallback: voiceflowStatusUrl,
+            statusCallbackEvent: ['initiated'], // Trigger as soon as the leg starts
+            statusCallbackMethod: 'POST'
         }, voiceflowNumber);
 
         console.log('[DropVM] Generated TwiML:', response.toString());
@@ -95,18 +100,6 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
         await client.calls(callSid).update({
             twiml: response.toString()
         });
-
-        // Trigger N8N Webhook with new Redirect Call SID
-        try {
-            // The Call SID remains the same for the parent call leg we redirected
-            await axios.post('https://lovoiceagent.app.n8n.cloud/webhook/f48c5702-1f17-445c-a0d2-d487985c23e8', {
-                call_sid: callSid,
-                Phone_number: leadPhone || 'Unknown'
-            });
-            console.log(`[DropVM] Webhook triggered for CallSid: ${callSid}`);
-        } catch (webhookError: any) {
-            console.error(`[DropVM] Failed to trigger webhook:`, webhookError.message);
-        }
 
         // Cleanup store
         activeCalls.delete(leadId);
@@ -116,6 +109,30 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
         console.error('Error dropping voicemail:', error);
         res.status(500).json({ error: error.message });
     }
+});
+
+// 3. New Route: Handle Voiceflow Leg Status
+// This triggers the webhook with the CORRECT child CallSid
+router.post('/voiceflow-status', async (req: Request, res: Response) => {
+    const { CallSid, CallStatus } = req.body;
+    const { leadPhone } = req.query;
+
+    console.log(`[VoiceflowStatus] CallSid: ${CallSid}, Status: ${CallStatus}, Phone: ${leadPhone}`);
+
+    if (CallStatus === 'initiated') {
+        try {
+            console.log(`[VoiceflowStatus] Triggering Webhook for Child SID: ${CallSid}`);
+            await axios.post('https://lovoiceagent.app.n8n.cloud/webhook/f48c5702-1f17-445c-a0d2-d487985c23e8', {
+                call_sid: CallSid,
+                Phone_number: leadPhone || 'Unknown'
+            });
+            console.log(`[VoiceflowStatus] Webhook triggered successfully.`);
+        } catch (webhookError: any) {
+            console.error(`[VoiceflowStatus] Failed to trigger webhook:`, webhookError.message);
+        }
+    }
+
+    res.sendStatus(200);
 });
 
 router.post('/dial-status', (req: Request, res: Response) => {
