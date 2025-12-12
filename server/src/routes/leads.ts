@@ -134,7 +134,7 @@ router.post('/voiceflow-proxy', async (req: Request, res: Response) => {
         console.error(`[VoiceflowProxy] Failed to trigger webhook:`, webhookError.message);
     }
 
-    // 3. Forward the call to the REAL Voiceflow URL
+    // 3. Forward the call to the REAL Voiceflow URL (Transparent Proxy)
     const voiceflowUrl = process.env.VOICEFLOW_FORWARDING_URL;
 
     if (!voiceflowUrl) {
@@ -144,11 +144,34 @@ router.post('/voiceflow-proxy', async (req: Request, res: Response) => {
         return res.type('text/xml').send(twiml.toString());
     }
 
-    console.log(`[VoiceflowProxy] Forwarding to Voiceflow: ${voiceflowUrl}`);
-    const twiml = new twilio.twiml.VoiceResponse();
-    twiml.redirect(voiceflowUrl);
+    try {
+        console.log(`[VoiceflowProxy] Forwarding to Voiceflow: ${voiceflowUrl}`);
 
-    res.type('text/xml').send(twiml.toString());
+        // Voiceflow expects a standard Twilio Webhook (Form URL Encoded)
+        // We use URLSearchParams to ensure the body is sent correctly
+        const response = await axios.post(voiceflowUrl, new URLSearchParams(req.body as any).toString(), {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+        });
+
+        console.log('[VoiceflowProxy] Received response from Voiceflow.');
+        // Return the TwiML directly
+        res.set('Content-Type', 'text/xml');
+        res.send(response.data);
+
+    } catch (proxyError: any) {
+        console.error(`[VoiceflowProxy] Error forwarding to Voiceflow:`, proxyError.message);
+        if (proxyError.response) {
+            console.error(`[VoiceflowProxy] Voiceflow Status: ${proxyError.response.status}`);
+            console.error(`[VoiceflowProxy] Voiceflow Data:`, proxyError.response.data);
+        }
+
+        // Fallback TwiML
+        const twiml = new twilio.twiml.VoiceResponse();
+        twiml.say('Sorry, could not connect to the voice agent.');
+        res.type('text/xml').send(twiml.toString());
+    }
 });
 
 router.post('/dial-status', (req: Request, res: Response) => {
