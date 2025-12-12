@@ -146,11 +146,12 @@ router.post('/voiceflow-proxy', async (req: Request, res: Response) => {
 
     try {
         console.log(`[VoiceflowProxy] Forwarding body keys: ${Object.keys(req.body).join(', ')}`);
-        console.log(`[VoiceflowProxy] Forwarding to Voiceflow: ${voiceflowUrl}`);
+        console.log(`[VoiceflowProxy] Forwarding to Voiceflow (GET): ${voiceflowUrl}`);
 
-        // Voiceflow expects a standard Twilio Webhook (Form URL Encoded)
-        // We use URLSearchParams to ensure the body is sent correctly
-        const response = await axios.post(voiceflowUrl, new URLSearchParams(req.body as any).toString(), {
+        // Voiceflow apparently expects GET for this endpoint (based on "Cannot POST" error)
+        // We map the Twilio POST body to Query Parameters
+        const response = await axios.get(voiceflowUrl, {
+            params: req.body,
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
             }
