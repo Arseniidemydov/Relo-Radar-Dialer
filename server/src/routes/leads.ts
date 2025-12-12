@@ -109,6 +109,10 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
 
 // 3. VOICEFLOW PROXY ROUTE (The "Interceptor")
 // Point your Twilio Number to THIS route: https://your-render-url.com/leads/voiceflow-proxy
+router.get('/voiceflow-proxy', (req, res) => {
+    res.send('Voiceflow Proxy is Active. Please configure Twilio to use POST.');
+});
+
 router.post('/voiceflow-proxy', async (req: Request, res: Response) => {
     console.log('[VoiceflowProxy] Incoming call intercepted.');
 
