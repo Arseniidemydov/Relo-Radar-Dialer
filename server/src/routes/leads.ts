@@ -135,16 +135,17 @@ router.post('/voiceflow-proxy', async (req: Request, res: Response) => {
     }
 
     // 3. Forward the call to the REAL Voiceflow URL (Transparent Proxy)
-    const voiceflowUrl = process.env.VOICEFLOW_FORWARDING_URL;
+    const voiceflowUrl = process.env.VOICEFLOW_FORWARDING_URL ? process.env.VOICEFLOW_FORWARDING_URL.trim() : '';
 
     if (!voiceflowUrl) {
-        console.error('[VoiceflowProxy] VOICEFLOW_FORWARDING_URL not set!');
+        console.error('[VoiceflowProxy] VOICEFLOW_FORWARDING_URL not set or empty!');
         const twiml = new twilio.twiml.VoiceResponse();
         twiml.say('System configuration error. Forwarding URL missing.');
         return res.type('text/xml').send(twiml.toString());
     }
 
     try {
+        console.log(`[VoiceflowProxy] Forwarding body keys: ${Object.keys(req.body).join(', ')}`);
         console.log(`[VoiceflowProxy] Forwarding to Voiceflow: ${voiceflowUrl}`);
 
         // Voiceflow expects a standard Twilio Webhook (Form URL Encoded)
