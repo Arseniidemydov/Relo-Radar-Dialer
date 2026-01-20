@@ -115,6 +115,7 @@ router.get('/voiceflow-proxy', (req, res) => {
 
 router.post('/voiceflow-proxy', async (req: Request, res: Response) => {
     console.log('[VoiceflowProxy] Incoming call intercepted.');
+    console.log('[VoiceflowProxy] Full request body:', JSON.stringify(req.body, null, 2));
 
     // 1. Capture the CallSid (This is the INBOUND leg to Voiceflow)
     const callSid = req.body.CallSid;
@@ -122,28 +123,56 @@ router.post('/voiceflow-proxy', async (req: Request, res: Response) => {
 
     console.log(`[VoiceflowProxy] Captured Inbound CallSid: ${callSid}`);
     console.log(`[VoiceflowProxy] CallerID (From): ${fromNumber}`);
+    console.log(`[VoiceflowProxy] Current pendingVoicemails entries:`, Array.from(pendingVoicemails.entries()));
 
-    // 2. Retrieve the Lead Phone from our store
-    const leadPhone = pendingVoicemails.get(fromNumber);
+    // Helper to normalize phone numbers for consistent matching
+    const normalizePhone = (phone: string): string => {
+        if (!phone) return '';
+        // Remove all non-digit characters except leading +
+        return phone.replace(/[^\d+]/g, '');
+    };
+
+    // 2. Retrieve the Lead Phone from our store (try exact match first, then normalized)
+    let leadPhone = pendingVoicemails.get(fromNumber);
+    let matchedKey = fromNumber;
+
+    // If exact match fails, try normalized matching
+    if (!leadPhone) {
+        const normalizedFrom = normalizePhone(fromNumber);
+        console.log(`[VoiceflowProxy] Exact match failed. Trying normalized: ${normalizedFrom}`);
+
+        for (const [key, value] of pendingVoicemails.entries()) {
+            if (normalizePhone(key) === normalizedFrom) {
+                leadPhone = value;
+                matchedKey = key;
+                console.log(`[VoiceflowProxy] Found match via normalization: ${key} -> ${value}`);
+                break;
+            }
+        }
+    }
 
     if (leadPhone) {
         console.log(`[VoiceflowProxy] Retrieved Principal Lead Phone: ${leadPhone}`);
 
         // 3. Trigger Webhook with Inbound SID + Correct Lead Phone
         try {
-            await axios.post('https://lovoiceagent.app.n8n.cloud/webhook/f48c5702-1f17-445c-a0d2-d487985c23e8', {
+            const webhookPayload = {
                 call_sid: callSid,
                 Phone_number: leadPhone
-            });
+            };
+            console.log(`[VoiceflowProxy] Sending webhook payload:`, JSON.stringify(webhookPayload));
+
+            await axios.post('https://lovoiceagent.app.n8n.cloud/webhook/f48c5702-1f17-445c-a0d2-d487985c23e8', webhookPayload);
             console.log(`[VoiceflowProxy] Webhook triggered successfully with Inbound SID.`);
         } catch (webhookError: any) {
             console.error(`[VoiceflowProxy] Failed to trigger webhook:`, webhookError.message);
         }
 
         // Cleanup mapping
-        pendingVoicemails.delete(fromNumber);
+        pendingVoicemails.delete(matchedKey);
     } else {
         console.warn(`[VoiceflowProxy] Warning: No pending mapping found for CallerID ${fromNumber}`);
+        console.warn(`[VoiceflowProxy] Available keys in store:`, Array.from(pendingVoicemails.keys()));
     }
 
     // 4. Forward the call to the REAL Voiceflow URL (Transparent Proxy)
