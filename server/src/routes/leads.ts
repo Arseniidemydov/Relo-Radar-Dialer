@@ -2,12 +2,74 @@ import { Router, Request, Response } from 'express';
 import twilio from 'twilio';
 import { leads, activeCalls, pendingVoicemails, PendingVoicemailData } from '../store';
 import axios from 'axios';
+import { fetchLeadsFromNotion } from '../services/notionService';
+
 
 const router = Router();
 
 // 1. Get Leads
 router.get('/', (req: Request, res: Response) => {
     res.json(leads);
+});
+
+// 1.5. Sync Leads from Notion
+router.post('/sync-notion', async (req: Request, res: Response) => {
+    const { databaseId } = req.body;
+
+    if (!databaseId) {
+        return res.status(400).json({ error: 'Missing databaseId' });
+    }
+
+    if (!process.env.NOTION_API_KEY) {
+        return res.status(500).json({ error: 'NOTION_API_KEY not configured on server' });
+    }
+
+    try {
+        console.log(`[NotionSync] Fetching leads from database: ${databaseId}`);
+        const notionLeads = await fetchLeadsFromNotion(databaseId);
+
+        if (notionLeads.length === 0) {
+            return res.status(404).json({
+                error: 'No leads found. Make sure your database has Name and Phone columns with data.'
+            });
+        }
+
+        // Add fetched leads to in-memory store (avoiding duplicates by phone)
+        const existingPhones = new Set(leads.map(l => l.phone));
+        let addedCount = 0;
+
+        for (const lead of notionLeads) {
+            if (!existingPhones.has(lead.phone)) {
+                leads.push(lead);
+                existingPhones.add(lead.phone);
+                addedCount++;
+            }
+        }
+
+        console.log(`[NotionSync] Added ${addedCount} new leads (${notionLeads.length - addedCount} duplicates skipped)`);
+
+        res.json({
+            success: true,
+            leads: notionLeads,
+            addedCount,
+            totalFetched: notionLeads.length,
+            message: `Synced ${addedCount} new leads from Notion`
+        });
+    } catch (error: any) {
+        console.error('[NotionSync] Error:', error);
+
+        // Provide helpful error messages
+        if (error.code === 'unauthorized') {
+            return res.status(401).json({ error: 'Invalid Notion API key' });
+        }
+        if (error.code === 'object_not_found') {
+            return res.status(404).json({
+                error: 'Database not found. Make sure the database ID is correct and shared with your integration.'
+            });
+        }
+
+        res.status(500).json({ error: error.message || 'Failed to sync from Notion' });
+    }
 });
 
 // 2. Drop Voicemail

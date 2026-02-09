@@ -32,6 +32,7 @@ const getApiUrl = () => {
 const SERVER_URL = getApiUrl();
 import { ImportLeadsModal } from './ImportLeadsModal';
 import { AddProspectModal } from './AddProspectModal';
+import { NotionSyncModal } from './NotionSyncModal';
 
 export const Dialer: React.FC = () => {
     const { deviceState, callState, makeCall, hangup, error: voiceError } = useTwilioVoice({
@@ -106,6 +107,18 @@ export const Dialer: React.FC = () => {
         console.log('Added new lead:', newLead);
     };
 
+    const handleNotionSync = (syncedLeads: Lead[]) => {
+        // Add synced leads to existing list (backend already prevents duplicates)
+        setLeads(prev => {
+            const existingPhones = new Set(prev.map(l => l.phone));
+            const newLeads = syncedLeads.filter(l => !existingPhones.has(l.phone));
+            return [...prev, ...newLeads];
+        });
+        setFetchError(null);
+        setIsLoadingLeads(false);
+        console.log('Synced leads from Notion:', syncedLeads);
+    };
+
     const currentLead = leads[currentLeadIndex];
 
     const handleNextLead = () => {
@@ -161,7 +174,8 @@ export const Dialer: React.FC = () => {
             {elapsedTime > 5 && (
                 <div className="flex flex-col items-center mt-4">
                     <p className="text-xs text-yellow-500 mb-2 animate-pulse">Server might be waking up...</p>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap justify-center">
+                        <NotionSyncModal onSync={handleNotionSync} serverUrl={SERVER_URL} />
                         <ImportLeadsModal onImport={handleImportLeads} />
                         <AddProspectModal onAdd={handleAddLead} />
                     </div>
@@ -178,8 +192,9 @@ export const Dialer: React.FC = () => {
 
             {/* Allow importing even if fetch failed */}
             <div className="p-4 bg-gray-800 rounded-lg border border-gray-700 flex flex-col items-center">
-                <p className="text-gray-300 mb-3 text-sm">You can import CSV or add manually:</p>
-                <div className="flex gap-3">
+                <p className="text-gray-300 mb-3 text-sm">You can sync from Notion, import CSV, or add manually:</p>
+                <div className="flex gap-3 flex-wrap justify-center">
+                    <NotionSyncModal onSync={handleNotionSync} serverUrl={SERVER_URL} />
                     <ImportLeadsModal onImport={handleImportLeads} />
                     <AddProspectModal onAdd={handleAddLead} />
                 </div>
@@ -190,7 +205,8 @@ export const Dialer: React.FC = () => {
     if (!currentLead && leads.length === 0) return (
         <div className="p-8 text-white flex flex-col items-center">
             <p className="mb-4 text-xl">No leads found.</p>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap justify-center">
+                <NotionSyncModal onSync={handleNotionSync} serverUrl={SERVER_URL} />
                 <ImportLeadsModal onImport={handleImportLeads} />
                 <AddProspectModal onAdd={handleAddLead} />
             </div>
@@ -227,8 +243,9 @@ export const Dialer: React.FC = () => {
                         <span className="text-white/50 text-sm font-medium tracking-wide uppercase">Live Session</span>
                     </div>
                     <div className="flex gap-3">
-                        <AddProspectModal onAdd={handleAddLead} />
+                        <NotionSyncModal onSync={handleNotionSync} serverUrl={SERVER_URL} />
                         <ImportLeadsModal onImport={handleImportLeads} />
+                        <AddProspectModal onAdd={handleAddLead} />
                     </div>
                 </div>
 

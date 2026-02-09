@@ -12,6 +12,7 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
+        "@notionhq/client": "^5.9.0",
         "axios": "^1.13.2",
         "cors": "^2.8.5",
         "dotenv": "^16.3.1",
