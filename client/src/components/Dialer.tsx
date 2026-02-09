@@ -244,8 +244,6 @@ export const Dialer: React.FC = () => {
                     </div>
                     <div className="flex gap-3">
                         <NotionSyncModal onSync={handleNotionSync} serverUrl={SERVER_URL} />
-                        <ImportLeadsModal onImport={handleImportLeads} />
-                        <AddProspectModal onAdd={handleAddLead} />
                     </div>
                 </div>
 
@@ -331,6 +329,11 @@ export const Dialer: React.FC = () => {
                                 </span>
                             </>
                         )}
+                    </div>
+                    {/* Import/Add buttons below device status */}
+                    <div className="flex justify-center gap-2 mt-2 pointer-events-auto">
+                        <ImportLeadsModal onImport={handleImportLeads} />
+                        <AddProspectModal onAdd={handleAddLead} />
                     </div>
                 </div>
             </div>
