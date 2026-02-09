@@ -126,10 +126,14 @@ export const Dialer: React.FC = () => {
                 leadPhone: currentLead.phone
             });
             setDropStatus('Voicemail Dropped!');
-            // Optionally hangup the agent leg locally if desired, 
-            // or let the backend/Twilio handle logic.
-            // Usually, dropping VM means the agent is done.
-            hangup();
+            // Wait 3 seconds before hanging up to allow Voiceflow to establish
+            // the connection and start playing the voicemail. Immediate hangup
+            // causes a race condition where the child leg gets terminated before
+            // Voiceflow can start speaking.
+            setTimeout(() => {
+                hangup();
+                setDropStatus(null);
+            }, 3000);
         } catch (err) {
             console.error(err);
             setDropStatus('Failed to drop voicemail');
