@@ -44,15 +44,14 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
         console.log(`[DropVM] LeadID: ${leadId}, Name: ${leadName || 'Unknown'}, Phone: ${leadPhone || 'Unknown'}`);
 
         // --- VOICEFLOW VARIABLE INJECTION ---
-        // Use callSid as unique session ID to prevent conflicts between rapid sequential calls
-        // Previously used callerId which is SHARED across all calls, causing state overwrites
-        const uniqueSessionId = callSid;
+        // Use callerId as Voiceflow user ID - Voiceflow identifies sessions by the caller's phone number
+        // The sequential call timing issue is handled by the increased hangup delay on the client side
 
         if (process.env.VOICEFLOW_API_KEY) {
-            console.log(`[DropVM] Updating Voiceflow State for UserID (unique): ${uniqueSessionId}`);
+            console.log(`[DropVM] Updating Voiceflow State for UserID (CallerID): ${callerId}`);
             try {
                 await axios.patch(
-                    `https://general-runtime.voiceflow.com/state/user/${encodeURIComponent(uniqueSessionId)}/variables`,
+                    `https://general-runtime.voiceflow.com/state/user/${encodeURIComponent(callerId)}/variables`,
                     {
                         name: leadName || 'Unknown',
                         phone_number: leadPhone || 'Unknown'
