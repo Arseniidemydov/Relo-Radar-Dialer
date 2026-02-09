@@ -315,7 +315,7 @@ export const Dialer: React.FC = () => {
                 </div>
 
                 {/* Status Footer */}
-                <div className="absolute bottom-2 left-0 w-full text-center pointer-events-none">
+                <div className="text-center pb-16">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/5 text-xs font-semibold">
                         {voiceError ? (
                             <span className="text-red-400">{voiceError}</span>
@@ -330,11 +330,12 @@ export const Dialer: React.FC = () => {
                             </>
                         )}
                     </div>
-                    {/* Import/Add buttons below device status */}
-                    <div className="flex justify-center gap-2 mt-2 pointer-events-auto">
-                        <ImportLeadsModal onImport={handleImportLeads} />
-                        <AddProspectModal onAdd={handleAddLead} />
-                    </div>
+                </div>
+
+                {/* Import/Add buttons at bottom */}
+                <div className="flex justify-center gap-2 pb-4">
+                    <ImportLeadsModal onImport={handleImportLeads} />
+                    <AddProspectModal onAdd={handleAddLead} />
                 </div>
             </div>
         </div>
