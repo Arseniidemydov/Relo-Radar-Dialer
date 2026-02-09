@@ -14,19 +14,13 @@ router.get('/', (req: Request, res: Response) => {
 
 // 1.5. Sync Leads from Notion
 router.post('/sync-notion', async (req: Request, res: Response) => {
-    const { databaseId } = req.body;
-
-    if (!databaseId) {
-        return res.status(400).json({ error: 'Missing databaseId' });
-    }
-
     if (!process.env.NOTION_API_KEY) {
         return res.status(500).json({ error: 'NOTION_API_KEY not configured on server' });
     }
 
     try {
-        console.log(`[NotionSync] Fetching leads from database: ${databaseId}`);
-        const notionLeads = await fetchLeadsFromNotion(databaseId);
+        console.log('[NotionSync] Fetching leads from Notion...');
+        const notionLeads = await fetchLeadsFromNotion();
 
         if (notionLeads.length === 0) {
             return res.status(404).json({
@@ -64,7 +58,7 @@ router.post('/sync-notion', async (req: Request, res: Response) => {
         }
         if (error.code === 'object_not_found') {
             return res.status(404).json({
-                error: 'Database not found. Make sure the database ID is correct and shared with your integration.'
+                error: 'Database not found. Make sure your integration has access.'
             });
         }
 
