@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import twilio from 'twilio';
-import { leads, activeCalls, pendingVoicemails } from '../store';
+import { leads, activeCalls, pendingVoicemails, PendingVoicemailData } from '../store';
 import axios from 'axios';
 
 const router = Router();
@@ -43,43 +43,26 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
     try {
         console.log(`[DropVM] LeadID: ${leadId}, Name: ${leadName || 'Unknown'}, Phone: ${leadPhone || 'Unknown'}`);
 
-        // --- VOICEFLOW VARIABLE INJECTION ---
-        // Use callerId as Voiceflow user ID - Voiceflow identifies sessions by the caller's phone number
-        // The sequential call timing issue is handled by the increased hangup delay on the client side
-
-        if (process.env.VOICEFLOW_API_KEY) {
-            console.log(`[DropVM] Updating Voiceflow State for UserID (CallerID): ${callerId}`);
-            try {
-                await axios.patch(
-                    `https://general-runtime.voiceflow.com/state/user/${encodeURIComponent(callerId)}/variables`,
-                    {
-                        name: leadName || 'Unknown',
-                        phone_number: leadPhone || 'Unknown'
-                    },
-                    {
-                        headers: {
-                            Authorization: process.env.VOICEFLOW_API_KEY,
-                            'versionID': 'production'
-                        }
-                    }
-                );
-                console.log(`[DropVM] Voiceflow variables updated successfully.`);
-            } catch (vfError: any) {
-                console.error(`[DropVM] Failed to update Voiceflow variables:`, vfError.message);
-            }
-        } else {
-            console.warn('[DropVM] VOICEFLOW_API_KEY missing. Skipping variable injection.');
-        }
-        // ------------------------------------
+        // NOTE: Voiceflow variable injection moved to voiceflow-proxy
+        // This prevents session conflicts when making rapid sequential calls
+        // The proxy sets variables RIGHT before forwarding each call to Voiceflow
 
         console.log(`[DropVM] Found CallSid to redirect: ${callSid}`);
         console.log(`[DropVM] Redirecting to Voiceflow Number: ${voiceflowNumber}`);
 
-        // Store mapping for the Proxy to find the Lead Phone later
-        // Note: Using callerId as key since proxy looks up by From number
-        // The main session conflict fix is the unique Voiceflow userID above
-        pendingVoicemails.set(callerId, leadPhone || 'Unknown');
-        console.log(`[DropVM] Stored mapping: ${callerId} -> ${leadPhone}`);
+        // Store lead data in queue for the Proxy to use later
+        // Using a queue (array) so sequential calls don't overwrite each other
+        const voicemailData: PendingVoicemailData = {
+            name: leadName || 'Unknown',
+            phone: leadPhone || 'Unknown',
+            callSid: callSid,
+            timestamp: Date.now()
+        };
+
+        const existingQueue = pendingVoicemails.get(callerId) || [];
+        existingQueue.push(voicemailData);
+        pendingVoicemails.set(callerId, existingQueue);
+        console.log(`[DropVM] Queued voicemail data for ${callerId} (queue size: ${existingQueue.length})`);
 
         // Construct TwiML for the redirect
         const response = new twilio.twiml.VoiceResponse();
@@ -129,27 +112,54 @@ router.post('/voiceflow-proxy', async (req: Request, res: Response) => {
     console.log(`[VoiceflowProxy] Captured Inbound CallSid: ${callSid}`);
     console.log(`[VoiceflowProxy] CallerID (From): ${fromNumber}`);
 
-    // 2. Retrieve the Lead Phone from our store
-    const leadPhone = pendingVoicemails.get(fromNumber);
+    // 2. Retrieve the Lead Data from our queue (FIFO - first in, first out)
+    const queue = pendingVoicemails.get(fromNumber);
+    const leadData = queue && queue.length > 0 ? queue.shift() : null;
 
-    if (leadPhone) {
-        console.log(`[VoiceflowProxy] Retrieved Principal Lead Phone: ${leadPhone}`);
+    // Update or cleanup the queue
+    if (queue && queue.length === 0) {
+        pendingVoicemails.delete(fromNumber);
+    }
 
-        // 3. Trigger Webhook with Inbound SID + Correct Lead Phone
+    if (leadData) {
+        console.log(`[VoiceflowProxy] Retrieved Lead Data: Name=${leadData.name}, Phone=${leadData.phone}`);
+        console.log(`[VoiceflowProxy] Remaining queue size: ${queue?.length || 0}`);
+
+        // 3. Inject Voiceflow variables RIGHT NOW, before forwarding
+        // This ensures the correct lead data is set for THIS specific call
+        if (process.env.VOICEFLOW_API_KEY) {
+            try {
+                await axios.patch(
+                    `https://general-runtime.voiceflow.com/state/user/${encodeURIComponent(fromNumber)}/variables`,
+                    {
+                        name: leadData.name,
+                        phone_number: leadData.phone
+                    },
+                    {
+                        headers: {
+                            Authorization: process.env.VOICEFLOW_API_KEY,
+                            'versionID': 'production'
+                        }
+                    }
+                );
+                console.log(`[VoiceflowProxy] Voiceflow variables injected successfully for this call.`);
+            } catch (vfError: any) {
+                console.error(`[VoiceflowProxy] Failed to inject Voiceflow variables:`, vfError.message);
+            }
+        }
+
+        // 4. Trigger Webhook with Inbound SID + Correct Lead Phone
         try {
             await axios.post('https://lovoiceagent.app.n8n.cloud/webhook/f48c5702-1f17-445c-a0d2-d487985c23e8', {
                 call_sid: callSid,
-                Phone_number: leadPhone
+                Phone_number: leadData.phone
             });
             console.log(`[VoiceflowProxy] Webhook triggered successfully with Inbound SID.`);
         } catch (webhookError: any) {
             console.error(`[VoiceflowProxy] Failed to trigger webhook:`, webhookError.message);
         }
-
-        // Cleanup mapping
-        pendingVoicemails.delete(fromNumber);
     } else {
-        console.warn(`[VoiceflowProxy] Warning: No pending mapping found for CallerID ${fromNumber}`);
+        console.warn(`[VoiceflowProxy] Warning: No pending lead data found for CallerID ${fromNumber}`);
     }
 
     // 4. Forward the call to the REAL Voiceflow URL (Transparent Proxy)

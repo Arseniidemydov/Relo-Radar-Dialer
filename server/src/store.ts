@@ -5,9 +5,15 @@
 // Store active calls: LeadID -> CallSid
 export const activeCalls = new Map<string, string>();
 
-// Store pending voicemail drops: CallerID -> Lead Phone
-// Used to link the outbound call leg to the inbound voiceflow leg
-export const pendingVoicemails = new Map<string, string>();
+// Store pending voicemail drops: CallerID -> Array of Lead Data (queue)
+// Using an array to handle multiple sequential calls with the same callerId
+export interface PendingVoicemailData {
+    name: string;
+    phone: string;
+    callSid: string;
+    timestamp: number;
+}
+export const pendingVoicemails = new Map<string, PendingVoicemailData[]>();
 
 interface Lead {
     id: string;
