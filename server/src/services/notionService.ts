@@ -7,9 +7,8 @@ export interface Lead {
     notes: string;
 }
 
-// Hardcoded data source ID (from URL's v= parameter)
-// Database URL: https://www.notion.so/hypelab/2a2bcfce678b80af9eefd39c96828b83?v=2a2bcfce678b8030b2c2000cb7bdf50b
-const NOTION_DATA_SOURCE_ID = '2a2bcfce678b8030b2c2000cb7bdf50b';
+// Hardcoded Data Source ID (Verified via API)
+const NOTION_DATA_SOURCE_ID = '2a2bcfce-678b-80f9-af55-000b0637bb50';
 
 /**
  * Extract text from a Notion property
@@ -56,9 +55,12 @@ function findProperty(properties: Record<string, any>, possibleNames: string[]):
 
 /**
  * Fetch leads from the Notion database
- * Uses the v5 SDK dataSources.query method
  */
 export async function fetchLeadsFromNotion(): Promise<Lead[]> {
+    if (!process.env.NOTION_API_KEY) {
+        throw new Error('NOTION_API_KEY is not set');
+    }
+
     const notion = new Client({
         auth: process.env.NOTION_API_KEY,
     });
@@ -67,47 +69,63 @@ export async function fetchLeadsFromNotion(): Promise<Lead[]> {
     let hasMore = true;
     let nextCursor: string | undefined = undefined;
 
+    console.log(`[NotionService] Fetching from Data Source: ${NOTION_DATA_SOURCE_ID}`);
+
     while (hasMore) {
-        // v5 SDK uses dataSources.query with data_source_id
-        const response: any = await (notion as any).dataSources.query({
-            data_source_id: NOTION_DATA_SOURCE_ID,
-            start_cursor: nextCursor,
-            page_size: 100,
-        });
-
-        for (const page of response.results) {
-            if (page.object !== 'page' || !('properties' in page)) {
-                continue;
-            }
-
-            const properties = page.properties;
-
-            const nameProperty = findProperty(properties, [
-                'Name', 'name', 'Full Name', 'Contact Name', 'Lead Name'
-            ]);
-
-            const phoneProperty = findProperty(properties, [
-                'Phone', 'phone', 'Phone Number', 'Phone number',
-                'Mobile', 'Cell', 'Telephone', 'Contact Number'
-            ]);
-
-            const name = extractPropertyValue(nameProperty);
-            const phone = extractPropertyValue(phoneProperty);
-
-            if (!phone) {
-                continue;
-            }
-
-            leads.push({
-                id: page.id,
-                name: name || 'Unknown',
-                phone: phone,
-                notes: `Synced from Notion`,
+        try {
+            // v5 SDK uses dataSources.query
+            // Explicit cast to 'any' because types are missing query on databases in this version
+            const response: any = await (notion as any).dataSources.query({
+                data_source_id: NOTION_DATA_SOURCE_ID,
+                start_cursor: nextCursor,
+                page_size: 100,
             });
-        }
 
-        hasMore = response.has_more;
-        nextCursor = response.next_cursor || undefined;
+            console.log(`[NotionService] Fetched page. Results: ${response.results?.length}`);
+
+            for (const page of response.results) {
+                if (page.object !== 'page' || !('properties' in page)) {
+                    continue;
+                }
+
+                const properties = page.properties;
+
+                const nameProperty = findProperty(properties, [
+                    'Name', 'name', 'Full Name', 'Contact Name', 'Lead Name'
+                ]);
+
+                const phoneProperty = findProperty(properties, [
+                    'Phone', 'phone', 'Phone Number', 'Phone number',
+                    'Mobile', 'Cell', 'Telephone', 'Contact Number'
+                ]);
+
+                const name = extractPropertyValue(nameProperty);
+                const phone = extractPropertyValue(phoneProperty);
+
+                if (!phone) {
+                    continue;
+                }
+
+                leads.push({
+                    id: page.id,
+                    name: name || 'Unknown',
+                    phone: phone,
+                    notes: `Synced from Notion`,
+                });
+            }
+
+            hasMore = response.has_more;
+            nextCursor = response.next_cursor || undefined;
+
+        } catch (error: any) {
+            console.error('[NotionService] Error calling databases.query:', error);
+
+            // Debugging helper: Check if it's the "not a function" error
+            if (error.message?.includes('not a function')) {
+                console.error('[NotionService] Debug - Available keys on notion.databases:', Object.keys(notion.databases));
+            }
+            throw error;
+        }
     }
 
     return leads;
