@@ -7,8 +7,9 @@ export interface Lead {
     notes: string;
 }
 
-// Hardcoded database ID
-const NOTION_DATABASE_ID = '2a2bcfce678b80af9eefd39c96828b83';
+// Hardcoded data source ID (from URL's v= parameter)
+// Database URL: https://www.notion.so/hypelab/2a2bcfce678b80af9eefd39c96828b83?v=2a2bcfce678b8030b2c2000cb7bdf50b
+const NOTION_DATA_SOURCE_ID = '2a2bcfce678b8030b2c2000cb7bdf50b';
 
 /**
  * Extract text from a Notion property
@@ -69,7 +70,7 @@ export async function fetchLeadsFromNotion(): Promise<Lead[]> {
     while (hasMore) {
         // v5 SDK uses dataSources.query with data_source_id
         const response: any = await (notion as any).dataSources.query({
-            data_source_id: NOTION_DATABASE_ID,
+            data_source_id: NOTION_DATA_SOURCE_ID,
             start_cursor: nextCursor,
             page_size: 100,
         });
