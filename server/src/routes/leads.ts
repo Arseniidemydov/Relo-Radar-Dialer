@@ -44,11 +44,15 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
         console.log(`[DropVM] LeadID: ${leadId}, Name: ${leadName || 'Unknown'}, Phone: ${leadPhone || 'Unknown'}`);
 
         // --- VOICEFLOW VARIABLE INJECTION ---
+        // Use callSid as unique session ID to prevent conflicts between rapid sequential calls
+        // Previously used callerId which is SHARED across all calls, causing state overwrites
+        const uniqueSessionId = callSid;
+
         if (process.env.VOICEFLOW_API_KEY) {
-            console.log(`[DropVM] Updating Voiceflow State for UserID (CallerID): ${callerId}`);
+            console.log(`[DropVM] Updating Voiceflow State for UserID (unique): ${uniqueSessionId}`);
             try {
                 await axios.patch(
-                    `https://general-runtime.voiceflow.com/state/user/${encodeURIComponent(callerId)}/variables`,
+                    `https://general-runtime.voiceflow.com/state/user/${encodeURIComponent(uniqueSessionId)}/variables`,
                     {
                         name: leadName || 'Unknown',
                         phone_number: leadPhone || 'Unknown'
@@ -73,15 +77,18 @@ router.post('/drop-voicemail', async (req: Request, res: Response) => {
         console.log(`[DropVM] Redirecting to Voiceflow Number: ${voiceflowNumber}`);
 
         // Store mapping for the Proxy to find the Lead Phone later
+        // Note: Using callerId as key since proxy looks up by From number
+        // The main session conflict fix is the unique Voiceflow userID above
         pendingVoicemails.set(callerId, leadPhone || 'Unknown');
         console.log(`[DropVM] Stored mapping: ${callerId} -> ${leadPhone}`);
 
         // Construct TwiML for the redirect
         const response = new twilio.twiml.VoiceResponse();
-        response.say(`Redirecting ${leadName || 'the lead'} to voicemail now.`);
+        // REMOVED: response.say() - this was being recorded by the lead's voicemail!
+        // Don't speak anything on the lead's leg, go straight to dialing Voiceflow
 
-        // Append name to the action URL so we get it back in the webhook
-        const actionUrl = `${serverUrl}/leads/dial-status?name=${encodeURIComponent(leadName || '')}`;
+        // Pass callSid in action URL so dial-status and proxy can look up the mapping
+        const actionUrl = `${serverUrl}/leads/dial-status?name=${encodeURIComponent(leadName || '')}&callSid=${encodeURIComponent(callSid)}`;
 
         const dial = response.dial({
             action: actionUrl,
